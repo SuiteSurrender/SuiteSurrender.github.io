@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex, nofollow">
+<title>Suite Surrender — Pre-Launch Dashboard</title>
+
+<!-- ============================================================
+  Same SUPABASE_URL / SUPABASE_ANON_KEY as index.html goes below.
+  This page reads data only — actual writes still require the
+  service key or the RLS policies from supabase_setup.sql.
+============================================================ -->
+
+<style>
+  :root {
+    --black: #030302; --panel: #0e0b0a; --hairline: rgba(201,162,74,0.2);
+    --gold: #c9a24a; --gold-light: #ecd28d; --ivory: #f2e8da; --muted: #8f8072;
+    --rose: #c22a67;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--black); color: var(--ivory);
+    font-family: -apple-system, "Segoe UI", sans-serif;
+    min-height: 100vh;
+  }
+  .login-screen, .dash { max-width: 880px; margin: 0 auto; padding: 60px 24px; }
+  .login-screen { max-width: 360px; padding-top: 140px; text-align: center; }
+  h1 { font-size: 1.3rem; font-weight: 600; letter-spacing: 0.02em; margin-bottom: 4px; }
+  .eyebrow { font-size: 0.68rem; letter-spacing: 0.2em; text-transform: uppercase; color: var(--gold); margin-bottom: 28px; display: block; }
+  input {
+    width: 100%; background: rgba(255,255,255,0.03); border: 1px solid var(--hairline);
+    color: var(--ivory); padding: 12px 14px; margin-bottom: 10px; border-radius: 3px; font-size: 0.9rem;
+  }
+  button {
+    width: 100%; background: linear-gradient(120deg, var(--gold), var(--gold-light));
+    color: var(--black); border: none; padding: 12px; font-weight: 600; border-radius: 3px;
+    cursor: pointer; font-size: 0.85rem; letter-spacing: 0.05em;
+  }
+  .err { color: var(--rose); font-size: 0.8rem; margin-top: 10px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; margin: 28px 0 40px; }
+  .card { background: var(--panel); border: 1px solid var(--hairline); border-radius: 4px; padding: 22px; }
+  .card .num { font-size: 2rem; font-weight: 600; color: var(--gold-light); }
+  .card .label { font-size: 0.72rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); margin-top: 6px; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 40px; }
+  th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--hairline); font-size: 0.85rem; }
+  th { color: var(--muted); font-weight: 500; text-transform: uppercase; font-size: 0.68rem; letter-spacing: 0.08em; }
+  .hidden { display: none; }
+  a.logout { color: var(--muted); font-size: 0.75rem; float: right; cursor: pointer; }
+</style>
+</head>
+<body>
+
+<div class="login-screen" id="loginScreen">
+  <span class="eyebrow">Suite Surrender</span>
+  <h1>Pre-Launch Dashboard</h1>
+  <div style="margin-top:28px;">
+    <input type="email" id="loginEmail" placeholder="Email">
+    <input type="password" id="loginPass" placeholder="Password">
+    <button id="loginBtn">Sign In</button>
+    <div class="err" id="loginErr"></div>
+  </div>
+</div>
+
+<div class="dash hidden" id="dash">
+  <a class="logout" id="logoutBtn">Sign out</a>
+  <span class="eyebrow">Suite Surrender</span>
+  <h1>Pre-Launch Dashboard</h1>
+
+  <div class="grid">
+    <div class="card"><div class="num" id="totalLeads">—</div><div class="label">Private List</div></div>
+    <div class="card"><div class="num" id="weekLeads">—</div><div class="label">This Week</div></div>
+    <div class="card"><div class="num" id="totalViews">—</div><div class="label">Site Visits</div></div>
+    <div class="card"><div class="num" id="conversionRate">—</div><div class="label">Visit → Signup</div></div>
+  </div>
+
+  <h2 style="font-size:1rem; margin-bottom:14px;">Signups by Source</h2>
+  <table>
+    <thead><tr><th>Source</th><th>Leads</th><th>Visits</th><th>Conversion</th></tr></thead>
+    <tbody id="sourceTable"></tbody>
+  </table>
+
+  <h2 style="font-size:1rem; margin-bottom:14px;">Signups by Interest</h2>
+  <table>
+    <thead><tr><th>Interest</th><th>Leads</th><th>Share</th></tr></thead>
+    <tbody id="interestTable"></tbody>
+  </table>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+(function () {
+  "use strict";
+
+  const SUPABASE_URL = "https://lniowsaardmefsbgpeso.supabase.co";
+  const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxuaW93c2FhcmRtZWZzYmdwZXNvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODcwMTA1NzAsImV4cCI6MjEwMjU4NjU3MH0.PoesqPkpF5z-6-_HGIF7MmRYm93MS4FrG7BEea1c66M";
+  const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+  const loginScreen = document.getElementById("loginScreen");
+  const dash = document.getElementById("dash");
+
+  async function checkSession() {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session) {
+      loginScreen.classList.add("hidden");
+      dash.classList.remove("hidden");
+      loadStats();
+    } else {
+      loginScreen.classList.remove("hidden");
+      dash.classList.add("hidden");
+    }
+  }
+
+  document.getElementById("loginBtn").addEventListener("click", async () => {
+    const email = document.getElementById("loginEmail").value.trim();
+    const password = document.getElementById("loginPass").value;
+    const errEl = document.getElementById("loginErr");
+    errEl.textContent = "";
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) {
+      errEl.textContent = "Sign-in failed. Check your email and password.";
+    } else {
+      checkSession();
+    }
+  });
+
+  document.getElementById("logoutBtn").addEventListener("click", async () => {
+    await supabase.auth.signOut();
+    checkSession();
+  });
+
+  const INTEREST_LABELS = {
+    opening_updates: "Opening updates",
+    priority_booking: "Priority booking",
+    membership: "Founding membership",
+    private_events: "Private events"
+  };
+
+  async function loadStats() {
+    const { data: leads } = await supabase.from("leads").select("utm_source, interests, created_at");
+    const { data: views } = await supabase.from("page_views").select("utm_source, created_at");
+
+    const leadRows = leads || [];
+    const viewRows = views || [];
+
+    document.getElementById("totalLeads").textContent = leadRows.length;
+    document.getElementById("totalViews").textContent = viewRows.length;
+
+    const oneWeekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+    const weekCount = leadRows.filter(l => new Date(l.created_at).getTime() > oneWeekAgo).length;
+    document.getElementById("weekLeads").textContent = weekCount;
+
+    const rate = viewRows.length ? ((leadRows.length / viewRows.length) * 100).toFixed(1) + "%" : "—";
+    document.getElementById("conversionRate").textContent = rate;
+
+    const bySource = {};
+    viewRows.forEach(v => {
+      const s = v.utm_source || "direct";
+      bySource[s] = bySource[s] || { views: 0, leads: 0 };
+      bySource[s].views++;
+    });
+    leadRows.forEach(l => {
+      const s = l.utm_source || "direct";
+      bySource[s] = bySource[s] || { views: 0, leads: 0 };
+      bySource[s].leads++;
+    });
+
+    const tbody = document.getElementById("sourceTable");
+    tbody.innerHTML = "";
+    Object.entries(bySource)
+      .sort((a, b) => b[1].leads - a[1].leads)
+      .forEach(([source, stats]) => {
+        const conv = stats.views ? ((stats.leads / stats.views) * 100).toFixed(1) + "%" : "—";
+        const tr = document.createElement("tr");
+        tr.innerHTML = `<td>${source}</td><td>${stats.leads}</td><td>${stats.views}</td><td>${conv}</td>`;
+        tbody.appendChild(tr);
+      });
+
+    const byInterest = {};
+    leadRows.forEach(l => {
+      const tags = (l.interests && l.interests.length) ? l.interests : ["opening_updates"];
+      tags.forEach(i => { byInterest[i] = (byInterest[i] || 0) + 1; });
+    });
+    const interestBody = document.getElementById("interestTable");
+    interestBody.innerHTML = "";
+    Object.entries(byInterest)
+      .sort((a, b) => b[1] - a[1])
+      .forEach(([interest, count]) => {
+        const share = leadRows.length ? ((count / leadRows.length) * 100).toFixed(0) + "%" : "—";
+        const tr = document.createElement("tr");
+        tr.innerHTML = `<td>${INTEREST_LABELS[interest] || interest}</td><td>${count}</td><td>${share}</td>`;
+        interestBody.appendChild(tr);
+      });
+  }
+
+  checkSession();
+})();
+</script>
+
+</body>
+</html>
