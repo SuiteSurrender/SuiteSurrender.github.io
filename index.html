@@ -76,13 +76,87 @@ footer{padding:40px 0 55px;border-top:1px solid #1c171b}.foot{display:flex;justi
 <noscript>Please enable JavaScript to check availability.</noscript>
 </div></div></div></section>
 
-<section class="private reveal" id="private"><div class="wrap"><div class="label">Private Access</div><h2 class="serif">Stay behind the velvet rope.</h2><p>Priority dates, private invitations and Suite Surrender updates.</p><form class="email" onsubmit="event.preventDefault();document.getElementById('status').textContent='Private-list connection will be activated before launch.'"><input type="email" required placeholder="Email address"><button type="submit">Join Private List</button></form><div id="status" style="font-size:11px;color:#8d8187;margin-top:12px"></div></div></section>
+<section class="private reveal" id="private"><div class="wrap"><div class="label">Private Access</div><h2 class="serif">Stay behind the velvet rope.</h2><p>Priority dates, private invitations and Suite Surrender updates.</p><form class="email" id="vipForm" novalidate><input type="email" required placeholder="Email address"><button type="submit">Join Private List</button></form><div id="formStatus" aria-live="polite" style="font-size:11px;color:#8d8187;margin-top:12px"></div></div></section>
 
 <footer><div class="wrap foot"><div>SUITE SURRENDER · HOUSTON, TEXAS · 21+</div><div class="socials"><a href="https://www.instagram.com/suite_surrender?ref=suitesurrender_site" target="_blank">INSTAGRAM</a><a href="https://www.tiktok.com/@suite_surrender?ref=suitesurrender_site" target="_blank">TIKTOK</a></div><div>© 2026 SUITE SURRENDER</div></div></footer>
 <script>
 const io=new IntersectionObserver(es=>es.forEach(e=>{if(e.isIntersecting)e.target.classList.add('on')}),{threshold:.12});
 document.querySelectorAll('.reveal').forEach(x=>io.observe(x));
 </script>
+<!-- ===== Suite Surrender: Private List capture (paste just before </body>, replacing any existing script that handles the email form) ===== -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+(function () {
+  "use strict";
+  var SUPABASE_URL = "https://lniowsaardmefsbgpeso.supabase.co";
+  var SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxuaW93c2FhcmRtZWZzYmdwZXNvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODcwMTA1NzAsImV4cCI6MjEwMjU4NjU3MH0.PoesqPkpF5z-6-_HGIF7MmRYm93MS4FrG7BEea1c66M";
+  var sb = window.supabase ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
+
+  // source attribution (kept for the session)
+  var source;
+  try { source = JSON.parse(sessionStorage.getItem("ss_source")); } catch (e) {}
+  if (!source) {
+    var p = new URLSearchParams(location.search);
+    source = {
+      utm_source: p.get("utm_source") || p.get("src") || "direct",
+      utm_medium: p.get("utm_medium") || null,
+      utm_campaign: p.get("utm_campaign") || null,
+      referrer: document.referrer || null
+    };
+    try { sessionStorage.setItem("ss_source", JSON.stringify(source)); } catch (e) {}
+  }
+
+  // one page view per session
+  try {
+    if (sb && !sessionStorage.getItem("ss_pv_logged")) {
+      sessionStorage.setItem("ss_pv_logged", "1");
+      sb.from("page_views").insert([{ utm_source: source.utm_source, utm_medium: source.utm_medium,
+        utm_campaign: source.utm_campaign, referrer: source.referrer, path: location.pathname }]);
+    }
+  } catch (e) {}
+
+  // find the Private Access form: the one containing an email input
+  var emailEl = document.querySelector('#private input[type="email"]') || document.querySelector('input[type="email"]');
+  if (!emailEl) return;
+  var form = emailEl.closest("form");
+  var btn = form.querySelector('button[type="submit"], button');
+  var status = document.getElementById("formStatus");
+  if (!status) {
+    status = document.createElement("div");
+    status.id = "formStatus";
+    status.setAttribute("aria-live", "polite");
+    status.style.cssText = "font-size:12px;color:#9e9298;margin-top:12px;text-align:center";
+    form.insertAdjacentElement("afterend", status);
+  }
+  function say(msg) { status.textContent = msg; }
+
+  form.addEventListener("submit", async function (e) {
+    e.preventDefault();
+    var email = emailEl.value.trim().toLowerCase();
+    if (!/^\S+@\S+\.\S+$/.test(email)) return say("Please enter a valid email address.");
+    if (!sb) return say("Something went wrong. Please try again shortly.");
+    var label = btn ? btn.textContent : "";
+    if (btn) { btn.disabled = true; btn.textContent = "Submitting…"; }
+    try {
+      var res = await sb.from("leads").insert([{
+        email: email,
+        interests: ["opening_updates"],
+        utm_source: source.utm_source, utm_medium: source.utm_medium,
+        utm_campaign: source.utm_campaign, referrer: source.referrer
+      }]);
+      if (res.error && res.error.code === "23505") say("You're already on the private list.");
+      else if (res.error) throw res.error;
+      else { say("You're on the private list. We'll be in touch."); form.reset(); }
+    } catch (err) {
+      console.error("Suite Surrender lead insert failed", err);
+      say("Something went wrong. Please try again.");
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = label; }
+    }
+  });
+})();
+</script>
+
 </body></html>
 <style>
 /* V11.2 — true transparent Suite Surrender emblem */
